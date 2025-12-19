@@ -1,6 +1,6 @@
 # Architecture and Technical Approach
 
-## Kiến trúc Layer-1 cho Chứng chỉ Tiền gửi được Token hóa – Thiết kế ưu tiên tuân thủ
+## Kiến trúc Layer-1 cho Chứng chỉ Tiền gửi được Token hóa
 
 ---
 
@@ -14,11 +14,9 @@ Chứng chỉ tiền gửi (Certificate of Deposit – CD) là sản phẩm tài
 
 Giải pháp của chúng tôi là xây dựng một **Layer-1 blockchain chuyên biệt** cho tài sản tài chính có quản lý, trong đó CD được:
 
-- token hóa,
+- token hóa  tài sản tiền gửi
 - quản lý vòng đời đầy đủ,
-- và vận hành minh bạch, có thể kiểm toán,
-
-trong khi ngân hàng vẫn giữ vai trò trung tâm về lưu ký và đối soát tiền.
+- và vận hành minh bạch, có thể kiểm toán, trong khi ngân hàng vẫn giữ vai trò trung tâm về lưu ký và đối soát tiền.
 
 ---
 
@@ -28,13 +26,9 @@ Chứng chỉ tiền gửi là financial instrument có ràng buộc pháp lý, 
 
 **Tuân thủ trước – công nghệ sau**
 
-Hệ thống:
-
-- không thay thế ngân hàng,
-- mà kết nối core banking truyền thống với một Layer-1 blockchain chuyên biệt.
+Hệ thống: không thay thế ngân hàng,mà kết nối core banking truyền thống với một Layer-1 blockchain chuyên biệt.
 
 Trong mô hình này:
-
 - Ngân hàng chịu trách nhiệm lưu ký tiền fiat và tính toán lãi,
 - Blockchain đóng vai trò lớp settlement, tự động hóa và kiểm toán minh bạch.
 
