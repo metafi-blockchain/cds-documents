@@ -76,7 +76,7 @@ flowchart TB
 
     subgraph Business["⚙️ BUSINESS LAYER"]
         CDS[CDS Management Service<br/>- Quản lý sản phẩm CD<br/>- Điều phối nghiệp vụ<br/>- Lịch trả lãi]
-        Wallet[Wallet Service<br/>- Quản lý private keys<br/>- Ký giao dịch<br/>- AWS KMS]
+        Wallet[Wallet Service- Ký giao dịch<br/>- AWS KMS]
         Relayer[Relayer Service<br/>- Gasless transactions<br/>- Submit to chain]
         Mifox[Core Banking - Mifox<br/>- Lưu ký tiền fiat<br/>- Tính toán lãi<br/>- Đối soát]
     end
@@ -110,173 +110,6 @@ flowchart TB
     style Gateway fill:#f3e5f5
     style Business fill:#e8f5e9
     style Settlement fill:#fce4ec
-```
-
-### Luồng giao dịch chi tiết - Use Case: Mua CD
-
-```mermaid
-sequenceDiagram
-    actor User as 👤 Người dùng
-    participant App as Web App
-    participant Kong as API Gateway
-    participant CDS as CDS Management
-    participant Bank as Core Banking
-    participant Wallet as Wallet Service
-    participant KMS as AWS KMS
-    participant Relayer as Relayer
-    participant IPFS as IPFS
-    participant L1 as Blockchain L1
-
-    User->>App: 1. Chọn sản phẩm CD<br/>(mệnh giá, kỳ hạn)
-    App->>Kong: 2. POST /cd/purchase
-    Kong->>Kong: 3. Xác thực & Rate limit
-    Kong->>CDS: 4. Forward request
-
-    CDS->>Bank: 5. Verify tài khoản<br/>& số dư khả dụng
-    Bank-->>CDS: 6. Xác nhận OK
-
-    CDS->>Bank: 7. Khóa số tiền<br/>(reserve funds)
-    Bank-->>CDS: 8. Transaction ID
-
-    CDS->>IPFS: 9. Upload metadata<br/>(terms, rate, docs)
-    IPFS-->>CDS: 10. Return CID
-
-    CDS->>Wallet: 11. Request signature<br/>for mint transaction
-    Wallet->>KMS: 12. Sign with user key
-    KMS-->>Wallet: 13. Signature
-    Wallet-->>CDS: 14. Signed payload
-
-    CDS->>Relayer: 15. Submit transaction<br/>(with IPFS CID)
-    Relayer->>L1: 16. Broadcast TX<br/>(Relayer pays gas)
-    L1-->>Relayer: 17. TX receipt
-    Relayer-->>CDS: 18. On-chain confirmation
-
-    alt Blockchain TX Success
-        CDS->>Bank: 19. Finalize deposit<br/>(chuyển tiền vào CD)
-        Bank-->>CDS: 20. Settlement complete
-
-        CDS-->>App: 21. Success response<br/>(CD ID, blockchain TX)
-        App-->>User: 22. Hiển thị CD<br/>đã mua thành công
-
-        Note over L1: Event: CDIssued<br/>(user, amount, CID, maturity)
-    else Blockchain TX Failed
-        CDS->>Bank: 19b. Rollback - Unfreeze funds
-        Bank-->>CDS: 20b. Funds released
-
-        CDS-->>App: 21b. Error response<br/>(TX failed, funds returned)
-        App-->>User: 22b. Thông báo lỗi<br/>& retry option
-
-        Note over CDS: Log error & retry queue
-    end
-```
-
-### Luồng đáo hạn CD
-
-```mermaid
-sequenceDiagram
-    participant Scheduler as Cron Scheduler
-    participant CDS as CDS Management
-    participant Bank as Core Banking
-    participant Wallet as Wallet Service
-    participant Relayer as Relayer
-    participant L1 as Blockchain L1
-    actor User as 👤 Người dùng
-
-    Scheduler->>CDS: 1. Daily check<br/>matured CDs
-    CDS->>L1: 2. Query on-chain<br/>CD state
-    L1-->>CDS: 3. List of active CDs
-
-    CDS->>CDS: 4. Filter CDs<br/>maturity_date <= today
-
-    loop For each matured CD
-        CDS->>Bank: 5. Calculate final<br/>amount (principal + interest)
-        Bank-->>CDS: 6. Settlement amount
-
-        CDS->>Wallet: 7. Sign maturity TX
-        Wallet-->>CDS: 8. Signature
-
-        CDS->>Relayer: 9. Submit maturity TX
-        Relayer->>L1: 10. Update state<br/>ACTIVE → MATURED
-        L1-->>Relayer: 11. Confirmation
-
-        alt On-chain TX Success
-            CDS->>Bank: 12. Release funds<br/>to user account
-
-            alt Bank Release Success
-                Bank-->>User: 13. Credit account
-                Note over L1: Event: CDMatured<br/>(user, amount, interest)
-                CDS->>User: 14. Notification<br/>(email/push: Success)
-            else Bank Release Failed
-                CDS->>CDS: 15. Add to retry queue
-                CDS->>Admin: 16. Alert: Manual intervention needed
-                Note over CDS: Reconciliation required
-            end
-        else On-chain TX Failed
-            CDS->>CDS: 12b. Retry transaction<br/>(max 3 attempts)
-            CDS->>Admin: 13b. Alert if retry exhausted
-            Note over CDS: Add to failed queue<br/>for manual review
-        end
-    end
-```
-
-### Luồng chuyển nhượng CD (Secondary Market)
-
-```mermaid
-flowchart LR
-    subgraph Seller["🔴 NGƯỜI BÁN"]
-        S1[List CD for sale]
-        S2[Approve transfer]
-        S3[Receive payment]
-    end
-
-    subgraph Platform["📊 MARKETPLACE"]
-        M1{Verify CD<br/>ownership &<br/>Seller KYC}
-        M2{Verify<br/>Buyer KYC}
-        M3[Create escrow]
-        M4[Match buyer/seller]
-        M5[Settlement]
-    end
-
-    subgraph Buyer["🟢 NGƯỜI MUA"]
-        B1[Browse CDs]
-        B2[Submit KYC]
-        B3[Place order]
-        B4[Transfer funds]
-        B5[Receive CD]
-    end
-
-    subgraph Blockchain["⛓️ BLOCKCHAIN"]
-        BC1[Lock CD in<br/>escrow contract]
-        BC2[Verify payment]
-        BC3[Transfer ownership]
-        BC4[Update registry]
-    end
-
-    S1 --> M1
-    M1 -->|Valid| M3
-
-    B1 --> B2
-    B2 --> M2
-    M2 -->|KYC Approved| B3
-    B3 --> M4
-    M3 --> M4
-    M4 --> BC1
-
-    B4 --> BC2
-    BC2 -->|Confirmed| BC3
-
-    S2 -.Signature.-> BC3
-    BC3 --> BC4
-    BC4 --> S3
-    BC4 --> B5
-
-    M1 -->|Invalid| S1
-    M2 -->|KYC Failed| B1
-
-    style Seller fill:#ffebee
-    style Buyer fill:#e8f5e9
-    style Platform fill:#fff3e0
-    style Blockchain fill:#e3f2fd
 ```
 
 ### Kiến trúc bảo mật đa lớp
@@ -398,9 +231,9 @@ Kiến trúc được chia tách rõ ràng thành ba lớp:
 
 ### Luồng hoạt động chính
 
-#### 1. Presentation Layer (Tầng trình bày)
+#### 1. Presentation Layer
 
-Người dùng và quản trị viên thao tác qua **User Web App** và **Admin Web App**, tất cả request đều đi qua **API Gateway (Kong)** – điểm truy cập duy nhất.
+Người dùng và quản trị viên thao tác qua **User Web App** và **Admin Web App**, tất cả request đều đi qua **API Gateway** – điểm truy cập duy nhất.
 
 **User Web App:**
 - Đăng ký mua CD
@@ -414,9 +247,9 @@ Người dùng và quản trị viên thao tác qua **User Web App** và **Admin
 - Giám sát hệ thống
 - Quản lý quy tắc vận hành
 
-#### 2. Business Layer (Tầng nghiệp vụ)
+#### 2. Business Layer
 
-**API Gateway (Kong):**
+**API Gateway:**
 - Entry point duy nhất cho toàn hệ thống
 - Routing, authentication, rate limiting
 - mTLS security, logging & monitoring
@@ -432,9 +265,8 @@ Chức năng:
 - Kích hoạt các hành động on-chain
 
 **Wallet Service + AWS KMS:**
-- Quản lý private keys an toàn
-- Ký giao dịch theo chuẩn EIP-712
-- Không lộ key ra ngoài hệ thống
+- Transaction signing under policy control (AWS KMS/HSM)
+- Keys never leave secure boundary.
 
 **Relayer Service:**
 - Chi trả phí giao dịch (gasless UX)
@@ -571,140 +403,8 @@ sequenceDiagram
     end
 ```
 
-**2. Scheduled Reconciliation:**
 
-| Tần suất | Scope | Action |
-|---------|-------|--------|
-| **Hourly** | Active CDs | Verify state consistency |
-| **Daily** | Full portfolio | Complete balance check |
-| **Weekly** | Interest accrual | Verify interest calculations |
-| **Monthly** | Audit report | Generate compliance report |
 
-**3. Reconciliation Checks:**
-
-```
-┌─────────────────────────────────────────────────────┐
-│         RECONCILIATION CHECKPOINTS                  │
-├─────────────────────────────────────────────────────┤
-│                                                     │
-│  ✓ Total Supply Check                              │
-│    ON-CHAIN: Σ(CD tokens minted)                   │
-│    OFF-CHAIN: Σ(Deposits in Mifox)                 │
-│    MUST MATCH: 1:1 ratio                           │
-│                                                     │
-│  ✓ Individual CD Verification                      │
-│    For each CD ID:                                 │
-│    - Principal amount matches                      │
-│    - Maturity date matches                         │
-│    - Interest rate matches                         │
-│    - Owner address matches account                 │
-│                                                     │
-│  ✓ State Consistency                               │
-│    CD state on-chain = CD status in bank           │
-│    (ACTIVE/MATURED/REDEEMED)                       │
-│                                                     │
-│  ✓ Interest Calculation                            │
-│    Bank-calculated interest = Smart contract calc  │
-│    Tolerance: ± 0.01% (rounding differences)       │
-│                                                     │
-│  ✓ Transaction History                             │
-│    All on-chain events have corresponding          │
-│    bank transactions (and vice versa)              │
-│                                                     │
-└─────────────────────────────────────────────────────┘
-```
-
-**4. Discrepancy Resolution Process:**
-
-```mermaid
-flowchart TD
-    A[Discrepancy Detected] --> B{Type of Mismatch}
-
-    B -->|Amount Mismatch| C[Check transaction logs]
-    B -->|State Mismatch| D[Check state transitions]
-    B -->|Missing Record| E[Check pending queue]
-
-    C --> F{Root Cause}
-    D --> F
-    E --> F
-
-    F -->|Failed TX| G[Retry transaction]
-    F -->|Double Processing| H[Rollback duplicate]
-    F -->|Data Entry Error| I[Manual correction]
-    F -->|System Bug| J[Escalate to Dev team]
-
-    G --> K{Resolved?}
-    H --> K
-    I --> K
-    J --> K
-
-    K -->|Yes| L[Update both systems<br/>Mark as reconciled]
-    K -->|No| M[Freeze affected CDs<br/>Manual intervention]
-
-    L --> N[Resume operations]
-    M --> O[Admin review required]
-```
-
-**5. Automated Alerts:**
-
-```yaml
-Alert Levels:
-  WARNING:
-    - Minor discrepancy (< 0.01%)
-    - Delayed reconciliation (> 1 hour)
-    - Single CD mismatch
-    Action: Log, auto-retry
-
-  ERROR:
-    - Significant mismatch (> 0.1%)
-    - Multiple CD mismatches
-    - Failed retry (3 attempts)
-    Action: Notify DevOps, pause new CDs
-
-  CRITICAL:
-    - Total supply mismatch (> 1%)
-    - System-wide discrepancy
-    - Security breach suspected
-    Action: Freeze all operations, notify C-level
-```
-
-**6. Audit Trail:**
-
-Tất cả reconciliation events được lưu vào:
-- **Database**: Structured logs với timestamp, before/after state
-- **Blockchain**: Hash của reconciliation report (immutable proof)
-- **S3**: Full reconciliation reports (regulatory compliance)
-
-**7. Monthly Audit Report:**
-
-```
-Generated automatically on 1st of each month:
-
-📊 Reconciliation Summary Report
-├─ Total CDs issued: X
-├─ Total value locked: $Y
-├─ Successful reconciliations: Z%
-├─ Discrepancies detected: N
-│  ├─ Auto-resolved: M
-│  └─ Manual intervention: (N-M)
-├─ Average reconciliation time: T seconds
-└─ Compliance status: ✅ PASS / ❌ FAIL
-
-Submitted to:
-- Internal Audit team
-- Compliance officer
-- External auditor (if required)
-```
-
-**Lợi ích:**
-
-- ✅ **Real-time detection** của discrepancies
-- ✅ **Automated resolution** cho 95% cases
-- ✅ **Audit-ready** reports
-- ✅ **Regulatory compliance** (Basel III, SOX)
-- ✅ **Transparent trail** for investigations
-
----
 
 ### 5️⃣ Off-chain Metadata – IPFS
 
@@ -746,56 +446,6 @@ Blockchain chỉ lưu CID/hash tham chiếu, đảm bảo dữ liệu bất bi�
 └─────────────────────────────────────────────────────┘
 ```
 
-**2. Replication & Redundancy:**
-
-- **Minimum 5 copies** của mỗi CID:
-  - 3 copies trên local IPFS nodes (different regions)
-  - 2 copies trên pinning services
-- **Geographic distribution**: Nodes ở 3 châu lục khác nhau
-- **Auto-replication**: Nếu node offline, tự động pin lên node khác
-
-**3. Backup & Recovery:**
-
-```
-Daily:  Snapshot metadata → S3
-Weekly: Full backup → Glacier
-Monthly: Archive → Filecoin
-
-Recovery Time Objective (RTO): < 1 hour
-Recovery Point Objective (RPO): < 24 hours
-```
-
-**4. Monitoring & Alerting:**
-
-- **Health checks** (mỗi 5 phút): Verify CID accessibility
-- **Alert triggers**:
-  - CID không accessible từ > 2 nodes
-  - Pin count < 3
-  - Gateway response time > 2s
-- **Auto-healing**: Tự động re-pin nếu detect missing
-
-**5. Gateway Strategy:**
-
-```
-User Request → CDN (CloudFlare)
-              ↓
-    ┌─────────┴─────────┐
-    ▼                   ▼
-IPFS Gateway 1    IPFS Gateway 2
-(Primary)         (Failover)
-    │                   │
-    └─────────┬─────────┘
-              ▼
-        IPFS Network
-```
-
-**Lợi ích:**
-
-- ✅ **High Availability**: 99.99% uptime
-- ✅ **Disaster Recovery**: Multi-region, multi-provider
-- ✅ **Cost Optimization**: Hot/Cold tiering
-- ✅ **Compliance**: Immutable audit trail
-- ✅ **Performance**: CDN caching cho metadata access
 
 ---
 
@@ -890,22 +540,11 @@ stateDiagram-v2
 
 **Chuyển trạng thái:**
 
-| Từ | Đến | Trigger | Condition |
-|---|---|---|---|
-| PENDING | ISSUED | Bank confirmation | Funds available |
-| PENDING | CANCELLED | Timeout / User cancel | 15 min timeout |
-| ISSUED | ACTIVE | Blockchain TX success | Mint successful |
-| ISSUED | CANCELLED | Blockchain TX failed | Rollback funds |
-| ACTIVE | TRANSFERRED | Secondary market list | Owner signature |
-| ACTIVE | LOCKED | Collateral deposit | Smart contract lock |
-| ACTIVE | MATURED | Time-based | Maturity date reached |
-| TRANSFERRED | ACTIVE | Transfer complete | New owner confirmed |
-| LOCKED | ACTIVE | Collateral release | Loan repaid |
-| MATURED | REDEEMED | User/Auto redeem | Settlement complete |
+
 
 ---
 
-## 🔐 Bảo mật & Tuân thủ
+## Bảo mật & Tuân thủ
 
 - Validator được kiểm soát (permissioned),
 - Smart contract có thể audit,
@@ -914,13 +553,12 @@ stateDiagram-v2
 
 ---
 
-## 🚀 Giá trị cốt lõi của kiến trúc
+## Giá trị cốt lõi của kiến trúc
 
 ✔️ Thiết kế riêng cho tài sản tài chính có quản lý
 ✔️ Thân thiện với ngân hàng và cơ quan quản lý
 ✔️ Trải nghiệm người dùng đơn giản, không cần gas
 ✔️ Phân tách on-chain / off-chain rõ ràng
-✔️ Sẵn sàng triển khai thực tế, không chỉ là ý tưởng
 
 ---
 
