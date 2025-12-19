@@ -420,34 +420,6 @@ Các thông tin như:
 
 Blockchain chỉ lưu CID/hash tham chiếu, đảm bảo dữ liệu bất biến, dễ kiểm toán và tối ưu chi phí on-chain.
 
-#### Chiến lược Pinning & High Availability
-
-**1. Multi-tier Pinning Strategy:**
-
-```
-┌─────────────────────────────────────────────────────┐
-│           IPFS STORAGE ARCHITECTURE                 │
-├─────────────────────────────────────────────────────┤
-│                                                     │
-│  Tier 1: Local IPFS Nodes (Hot Storage)            │
-│  ├─ Primary Node (Data Center A)                   │
-│  ├─ Replica Node (Data Center B)                   │
-│  └─ Replica Node (Data Center C)                   │
-│                                                     │
-│  Tier 2: Pinning Services (Managed)                │
-│  ├─ Pinata (Primary pinning service)               │
-│  ├─ Web3.Storage (Backup service)                  │
-│  └─ Filebase (S3-compatible backup)                │
-│                                                     │
-│  Tier 3: Archive Storage (Cold Storage)            │
-│  ├─ AWS S3 Glacier (Long-term archive)             │
-│  └─ Filecoin (Decentralized archive)               │
-│                                                     │
-└─────────────────────────────────────────────────────┘
-```
-
-
----
 
 ### 6️⃣ User Wallet Service – AWS KMS
 
@@ -555,10 +527,10 @@ stateDiagram-v2
 
 ## Giá trị cốt lõi của kiến trúc
 
-✔️ Thiết kế riêng cho tài sản tài chính có quản lý
-✔️ Thân thiện với ngân hàng và cơ quan quản lý
-✔️ Trải nghiệm người dùng đơn giản, không cần gas
-✔️ Phân tách on-chain / off-chain rõ ràng
+- Thiết kế riêng cho tài sản tài chính có quản lý
+- Thân thiện với ngân hàng và cơ quan quản lý
+- Trải nghiệm người dùng đơn giản, không cần gas
+-  Phân tách on-chain / off-chain rõ ràng
 
 ---
 
