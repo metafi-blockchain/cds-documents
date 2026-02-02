@@ -7,7 +7,214 @@
 
 ## Tổng quan kiến trúc hệ thống
 
-### Sơ đồ luồng tổng quan (Flowchart)
+Phần này trình bày kiến trúc hệ thống CDS Tokenization Platform qua 3 góc độ:
+
+1. **Sơ đồ kiến trúc tổng thể (C4 Context)** - Quan điểm high-level về hệ thống, actors và external systems
+2. **Sơ đồ Deployment Architecture** - Cách hệ thống được deploy trên cloud infrastructure
+3. **Sơ đồ luồng tổng quan (Component Flowchart)** - Chi tiết các components và data flows
+
+---
+
+### Sơ đồ kiến trúc tổng thể (High-level Architecture)
+
+```mermaid
+C4Context
+    title Kiến trúc hệ thống CDS Tokenization Platform
+
+    Person(user, "End Users", "Khách hàng cá nhân/<br/>Doanh nghiệp")
+    Person(admin, "Bank Admin", "Quản trị viên<br/>ngân hàng")
+
+    System_Boundary(platform, "CDS Platform") {
+        Container(webapp, "Web Application", "React/Next.js", "User interface cho<br/>mua/bán CD")
+        Container(mobile, "Mobile App", "React Native", "iOS/Android app")
+        Container(admin_portal, "Admin Portal", "React", "Quản trị và<br/>giám sát")
+
+        Container(gateway, "API Gateway", "Kong", "Entry point,<br/>mTLS, Rate limiting")
+        Container(auth, "Auth Service", "Node.js", "JWT, OAuth 2.0<br/>RBAC")
+
+        Container(cds, "CDS Service", "Node.js/NestJS", "Core business logic<br/>CD management")
+        Container(wallet, "Wallet Service", "Node.js", "Transaction signing<br/>AWS KMS")
+        Container(relayer, "Relayer Service", "Node.js", "Gasless transactions<br/>Blockchain submit")
+
+        ContainerDb(db, "PostgreSQL", "Primary database", "CD records, users<br/>transactions")
+        ContainerDb(cache, "Redis", "Cache layer", "Session, hot data<br/>rate limiting")
+        ContainerQueue(mq, "Message Queue", "RabbitMQ/Kafka", "Event streaming<br/>async processing")
+    }
+
+    System_Ext(mifos, "Core Banking", "Mifos X", "Deposit custody<br/>Interest calculation")
+    System_Ext(ipfs, "IPFS Network", "Distributed storage", "CD metadata<br/>Documents")
+    System_Ext(blockchain, "Blockchain L1", "Custom/EVM", "Smart contracts<br/>State & Events")
+
+    System_Ext(monitoring, "Observability", "ELK/Datadog/Grafana", "Logs, Metrics<br/>Alerts")
+
+    Rel(user, webapp, "Uses", "HTTPS")
+    Rel(user, mobile, "Uses", "HTTPS")
+    Rel(admin, admin_portal, "Manages", "HTTPS")
+
+    Rel(webapp, gateway, "API calls", "HTTPS/mTLS")
+    Rel(mobile, gateway, "API calls", "HTTPS/mTLS")
+    Rel(admin_portal, gateway, "API calls", "HTTPS/mTLS")
+
+    Rel(gateway, auth, "Authenticate", "gRPC")
+    Rel(gateway, cds, "Routes to", "HTTP/gRPC")
+
+    Rel(cds, db, "Read/Write", "SQL")
+    Rel(cds, cache, "Cache ops", "Redis Protocol")
+    Rel(cds, mq, "Publish events", "AMQP")
+    Rel(cds, mifos, "Verify funds", "REST API")
+    Rel(cds, ipfs, "Store metadata", "HTTP")
+    Rel(cds, wallet, "Request signature", "gRPC")
+
+    Rel(wallet, relayer, "Submit signed TX", "gRPC")
+    Rel(relayer, blockchain, "Broadcast TX", "JSON-RPC")
+
+    Rel(blockchain, mq, "Events", "WebSocket/Polling")
+    Rel(mq, cds, "Consume events", "AMQP")
+    Rel(mifos, mq, "Webhooks", "HTTP")
+
+    Rel(cds, monitoring, "Logs/Metrics", "")
+    Rel(wallet, monitoring, "Logs/Metrics", "")
+    Rel(relayer, monitoring, "Logs/Metrics", "")
+
+    UpdateLayoutConfig($c4ShapeInRow="4", $c4BoundaryInRow="2")
+```
+
+---
+
+### Sơ đồ Deployment Architecture
+
+```mermaid
+graph TB
+    subgraph Internet["🌐 INTERNET"]
+        Users[End Users]
+        Admins[Bank Admins]
+    end
+
+    subgraph CDN["☁️ CDN / Edge"]
+        CF[CloudFlare<br/>Static Assets<br/>DDoS Protection]
+    end
+
+    subgraph AWS["☁️ AWS Cloud"]
+        subgraph VPC["VPC - Private Network"]
+            subgraph PublicSubnet["Public Subnet"]
+                ALB[Application<br/>Load Balancer<br/>SSL Termination]
+                NAT[NAT Gateway]
+            end
+
+            subgraph PrivateSubnet1["Private Subnet - App Tier"]
+                WebApp[Web App<br/>EC2/ECS<br/>Auto Scaling]
+                API1[API Gateway<br/>Kong<br/>Multi-AZ]
+                Auth1[Auth Service<br/>ECS<br/>Multi-AZ]
+                CDS1[CDS Service<br/>ECS<br/>Multi-AZ]
+                Wallet1[Wallet Service<br/>ECS<br/>Multi-AZ]
+                Relayer1[Relayer Service<br/>ECS<br/>Multi-AZ]
+            end
+
+            subgraph PrivateSubnet2["Private Subnet - Data Tier"]
+                RDS[(RDS PostgreSQL<br/>Multi-AZ<br/>Encrypted)]
+                ElastiCache[(ElastiCache<br/>Redis Cluster<br/>Multi-AZ)]
+                MSK[Amazon MSK<br/>Kafka Managed<br/>3+ brokers]
+            end
+
+            subgraph Security["Security Services"]
+                KMS[AWS KMS<br/>Key Management<br/>HSM-backed]
+                SecretsMgr[Secrets Manager<br/>Credential Rotation]
+                WAF[AWS WAF<br/>Web Application<br/>Firewall]
+            end
+        end
+
+        subgraph Monitoring["Monitoring & Logging"]
+            CW[CloudWatch<br/>Logs & Metrics]
+            XRay[X-Ray<br/>Distributed Tracing]
+        end
+    end
+
+    subgraph External["🔗 EXTERNAL SYSTEMS"]
+        Mifos[Core Banking<br/>Mifos X<br/>On-premise/Cloud]
+        IPFS_Node[IPFS Pinning<br/>Pinata/Web3.Storage]
+        Blockchain[Blockchain RPC<br/>Archive Node<br/>Load Balanced]
+    end
+
+    subgraph Observability["📊 OBSERVABILITY STACK"]
+        Datadog[Datadog<br/>APM & Logs]
+        Grafana[Grafana Cloud<br/>Dashboards]
+        PagerDuty[PagerDuty<br/>Alerting & Oncall]
+    end
+
+    Users --> CF
+    Admins --> CF
+    CF --> ALB
+    ALB --> WebApp
+    ALB --> API1
+
+    API1 --> Auth1
+    API1 --> CDS1
+
+    CDS1 --> RDS
+    CDS1 --> ElastiCache
+    CDS1 --> MSK
+    CDS1 --> Mifos
+    CDS1 --> IPFS_Node
+    CDS1 --> Wallet1
+
+    Wallet1 --> KMS
+    Wallet1 --> Relayer1
+    Relayer1 --> Blockchain
+
+    MSK --> CDS1
+    Blockchain -.Events.-> MSK
+    Mifos -.Webhooks.-> API1
+
+    Auth1 --> SecretsMgr
+    CDS1 --> SecretsMgr
+    WAF --> ALB
+
+    CDS1 --> CW
+    Wallet1 --> CW
+    Relayer1 --> CW
+    CW --> Datadog
+    XRay --> Datadog
+
+    Datadog --> Grafana
+    Grafana --> PagerDuty
+
+    style Internet fill:#e1f5ff
+    style AWS fill:#ff9900,color:#fff
+    style External fill:#90EE90
+    style Observability fill:#f0f0f0
+    style VPC fill:#ffeaa7
+    style PublicSubnet fill:#fdcb6e
+    style PrivateSubnet1 fill:#74b9ff
+    style PrivateSubnet2 fill:#a29bfe
+    style Security fill:#fd79a8
+    style Monitoring fill:#ffeaa7
+```
+
+**Đặc điểm Deployment:**
+
+- **Multi-AZ Deployment:** Services được deploy trên nhiều Availability Zones để đảm bảo high availability
+- **Auto Scaling:** ECS services tự động scale dựa trên CPU/Memory/Request metrics
+- **Security:**
+  - Private subnets cho app và data tier
+  - KMS cho key management
+  - Secrets Manager cho credential rotation
+  - WAF cho web protection
+- **Networking:**
+  - VPC peering hoặc VPN cho kết nối Mifos
+  - NAT Gateway cho outbound internet access
+  - Internal load balancing giữa services
+- **Data Tier:**
+  - RDS Multi-AZ với automatic failover
+  - Redis cluster với sharding
+  - Kafka managed service (MSK) với 3+ brokers
+- **Monitoring:**
+  - CloudWatch cho AWS-native monitoring
+  - X-Ray cho distributed tracing
+  - Datadog/Grafana cho centralized observability
+
+---
+
+### Sơ đồ luồng tổng quan (Component Flowchart)
 
 ```mermaid
 flowchart TB
@@ -93,55 +300,6 @@ flowchart TB
     style Observability fill:#f0f0f0
 ```
 
-### Cấu trúc 3 tầng
-
-Kiến trúc được chia tách rõ ràng thành ba lớp:
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│              1️⃣ PRESENTATION LAYER                          │
-│        (Trải nghiệm người dùng)                             │
-│                                                             │
-│  ┌──────────────────┐        ┌──────────────────┐          │
-│  │  User Web App    │        │  Admin Web App   │          │
-│  └──────────────────┘        └──────────────────┘          │
-└─────────────────────────────────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│              2️⃣ BUSINESS LAYER                              │
-│        (Nghiệp vụ ngân hàng & điều phối)                    │
-│                                                             │
-│            ┌──────────────────────┐                         │
-│            │   API Gateway (Kong) │                         │
-│            └──────────────────────┘                         │
-│                       │                                     │
-│         ┌─────────────┼─────────────┐                       │
-│         ▼             ▼             ▼                       │
-│  ┌─────────────┐ ┌──────────┐ ┌─────────────┐             │
-│  │    CDS      │ │  Wallet  │ │   Relayer   │             │
-│  │ Management  │ │  Service │ │   Service   │             │
-│  └─────────────┘ └──────────┘ └─────────────┘             │
-│         │            │              │                       │
-│         ▼            ▼              │                       │
-│  ┌─────────────┐ ┌──────────┐     │                       │
-│  │   Mifos     │ │ AWS KMS  │     │                       │
-│  │ (Core Bank) │ │          │     │                       │
-│  └─────────────┘ └──────────┘     │                       │
-└─────────────────────────────────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│              3️⃣ SETTLEMENT LAYER                            │
-│        (Settlement và lưu trữ on-chain)                     │
-│                                                             │
-│  ┌──────────────┐              ┌────────────────┐          │
-│  │     IPFS     │              │  Blockchain    │          │
-│  │  (Metadata)  │◄────────────►│   Layer-1      │          │
-│  └──────────────┘              │ (State & Logic)│          │
-│                                └────────────────┘          │
-└─────────────────────────────────────────────────────────────┘
-```
 
 ### Luồng hoạt động chính
 
