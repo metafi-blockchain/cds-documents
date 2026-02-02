@@ -32,9 +32,7 @@ flowchart TB
         CDS[CDS Management Service<br/>- Quản lý sản phẩm CD<br/>- Điều phối nghiệp vụ<br/>- Lịch trả lãi]
         Wallet[Wallet Service<br/>- Custodial wallets<br/>- TX signing<br/>- AWS KMS]
         Relayer[Relayer Service<br/>- Gasless TX<br/>- Submit to chain<br/>- Nonce mgmt]
-        Mifox[Core Banking - Mifox<br/>- Lưu ký tiền fiat<br/>- Tính toán lãi<br/>- Đối soát]
-        Recon[Reconciliation Service<br/>- On/Off-chain validation<br/>- Real-time check<br/>- Alert system]
-        Notif[Notification Service<br/>- Email/SMS/Push<br/>- Webhooks]
+        Mifos[Core Banking - Mifos<br/>- Lưu ký tiền fiat<br/>- Tính toán lãi<br/>- Đối soát]
     end
 
     subgraph Data["💾 DATA & CACHE LAYER"]
@@ -63,43 +61,28 @@ flowchart TB
     %% Gateway & Auth
     Kong <--> Auth
     Kong --> CDS
-    Kong --> Notif
 
     %% Business logic flow
     CDS --> DB
     CDS --> Cache
     CDS --> MQ
-    CDS --> Mifox
+    CDS --> Mifos
     CDS --> IPFS
     CDS --> Wallet
-    CDS <--> Recon
 
     Wallet --> Relayer
     Relayer --> L1
     IPFS -.CID reference.-> L1
 
-    %% Reconciliation flow
-    Recon --> Mifox
-    Recon --> L1
-    Recon --> DB
-
     %% Event-driven architecture
     L1 -.Events.-> MQ
     MQ --> CDS
-    MQ --> Recon
-    MQ --> Notif
-    Mifox -.Webhooks.-> MQ
-
-    %% Notification
-    Notif -.Alert.-> U1
-    Notif -.Alert.-> U2
-    Notif -.Alert.-> U3
+    Mifos -.Webhooks.-> MQ
 
     %% Observability
-    CDS & Wallet & Relayer & Mifox & Recon --> Logs
-    CDS & Wallet & Relayer & Mifox & Recon --> Metrics
+    CDS & Wallet & Relayer & Mifos --> Logs
+    CDS & Wallet & Relayer & Mifos --> Metrics
     Metrics --> Alert
-    Recon --> Alert
 
     style Users fill:#e1f5ff
     style Presentation fill:#fff4e6
@@ -142,7 +125,7 @@ Kiến trúc được chia tách rõ ràng thành ba lớp:
 │         │            │              │                       │
 │         ▼            ▼              │                       │
 │  ┌─────────────┐ ┌──────────┐     │                       │
-│  │   Mifox     │ │ AWS KMS  │     │                       │
+│  │   Mifos     │ │ AWS KMS  │     │                       │
 │  │ (Core Bank) │ │          │     │                       │
 │  └─────────────┘ └──────────┘     │                       │
 └─────────────────────────────────────────────────────────────┘
@@ -190,7 +173,7 @@ Người dùng và quản trị viên thao tác qua **User Web App**, **Mobile A
 
 **CDS Management Service:**
 
-Logic nghiệp vụ CD được xử lý tại **CDS Management Service**, tích hợp trực tiếp với **Core Banking Service (Mifox)**.
+Logic nghiệp vụ CD được xử lý tại **CDS Management Service**, tích hợp trực tiếp với **Core Banking Service (Mifos)**.
 
 Chức năng:
 - Quản lý sản phẩm CD và CD instances
@@ -213,25 +196,12 @@ Chức năng:
 - Theo dõi trạng thái và retry
 - Nonce management để tránh transaction collision
 
-**Core Banking (Mifox):**
+**Core Banking (Mifos):**
 - Nguồn dữ liệu tài chính gốc
 - Ghi nhận tiền gửi bảo chứng
 - Tính toán lãi suất và số tiền đáo hạn
 - Xác nhận đối soát trước khi on-chain
 - Webhook callbacks cho CDS qua Message Queue
-
-**Reconciliation Service:**
-- Real-time validation giữa on-chain và off-chain state
-- So sánh total supply vs total deposits
-- Kiểm tra interest calculations
-- Tự động alert khi phát hiện discrepancy
-- Pause transactions khi có mismatch
-
-**Notification Service:**
-- Email, SMS, Push notification
-- Webhook callbacks cho third-party integrations
-- Template management
-- Retry mechanism
 
 #### 3. Settlement Layer (Tầng thanh toán)
 
@@ -252,7 +222,7 @@ Chức năng:
   - Tham chiếu metadata IPFS (CID/hash)
   - Event log phục vụ audit
 
-### Luồng giao dịch end-to-end (Cập nhật)
+### Luồng giao dịch end-to-end
 
 ```
 User Action → Web/Mobile App → Kong Gateway → Auth Service → CDS Management
@@ -273,15 +243,14 @@ User Action → Web/Mobile App → Kong Gateway → Auth Service → CDS Managem
                                                                     │
                                                                     ▼
                                                             Message Queue (MQ)
-                                            ┌───────────────────────┼──────────────────┐
-                                            ▼                       ▼                  ▼
-                                    CDS Management          Reconciliation     Notification
-                                    (Update state)          (Validate state)   (Alert users)
-                                            │                       │
-                                            └───────────┬───────────┘
-                                                        ▼
-                                                   PostgreSQL
-                                                   (Persist)
+                                                                    │
+                                                                    ▼
+                                                            CDS Management
+                                                            (Update state)
+                                                                    │
+                                                                    ▼
+                                                               PostgreSQL
+                                                               (Persist)
 ```
 
 ### Điểm nổi bật
@@ -292,9 +261,7 @@ Giao dịch on-chain được:
 - ✅ **Relayer Service** chi trả phí giao dịch, giúp người dùng có trải nghiệm gasless,
 - ✅ Đảm bảo bảo chứng 1:1 giữa token CD và tiền gửi thực tế trong Core Banking,
 - ✅ Minh bạch, có thể audit thông qua event log on-chain,
-- ✅ **Reconciliation Service** đảm bảo tính nhất quán real-time,
 - ✅ **Event-driven architecture** qua Message Queue cho scalability,
-- ✅ **Multi-channel notifications** cho user experience tốt hơn,
 - ✅ **Observability đầy đủ** với logging, metrics và alerting.
 
 ---
@@ -305,33 +272,27 @@ Giao dịch on-chain được:
 
 1. **Auth Service** - Tách riêng authentication/authorization khỏi Kong Gateway
 2. **Data Layer** - PostgreSQL + Redis + Message Queue cho persistence và caching
-3. **Reconciliation Service** - Đảm bảo consistency giữa on-chain và off-chain
-4. **Notification Service** - Multi-channel communication với users
-5. **Observability Layer** - Centralized logging, metrics, và alerting
-6. **Mobile App** - Mở rộng presentation layer cho mobile users
+3. **Observability Layer** - Centralized logging, metrics, và alerting
+4. **Mobile App** - Mở rộng presentation layer cho mobile users
 
 ### 🔄 Cải thiện luồng:
 
 **Trước:**
 ```
-User → Kong → CDS → (Mifox/IPFS/Wallet) → Relayer → L1
+User → Kong → CDS → (Mifos/IPFS/Wallet) → Relayer → L1
 ```
 
 **Sau:**
 ```
-User → Kong → Auth → CDS → (Mifox/IPFS/Wallet) → Relayer → L1
+User → Kong → Auth → CDS → (Mifos/IPFS/Wallet) → Relayer → L1
                                     ↓                              ↓
                                PostgreSQL ← MQ ← (Events) ← Blockchain
-                                              ↓
-                                    Reconciliation + Notification
 ```
 
 ### 🎯 Lợi ích:
 
 - **Scalability**: Event-driven architecture cho phép horizontal scaling
-- **Reliability**: Reconciliation service phát hiện và alert discrepancies
 - **Observability**: Full visibility vào system behavior
-- **User Experience**: Real-time notifications qua multiple channels
 - **Security**: RBAC và OAuth 2.0 cho fine-grained access control
 - **Performance**: Redis caching giảm load lên database và blockchain RPC
 
@@ -370,9 +331,9 @@ Mọi giao dịch on-chain đều phải phản ánh trạng thái tài chính h
 
 ---
 
-### 4️⃣ Core Banking Integration – Mifox Service
+### 4️⃣ Core Banking Integration – Mifos Service
 
-Mifox đóng vai trò nguồn dữ liệu tài chính gốc:
+Mifos đóng vai trò nguồn dữ liệu tài chính gốc:
 
 - Ghi nhận tiền gửi bảo chứng cho mỗi CD,
 - Tính toán lãi suất và số tiền đáo hạn,
@@ -462,104 +423,6 @@ Layer-1 lưu trữ:
 
 Blockchain đóng vai trò lớp settlement và kiểm toán minh bạch, không thay thế hệ thống ngân hàng.
 
----
-
-### 9️⃣ Data & Cache Layer
-
-**PostgreSQL Database:**
-- Primary data store cho CD records, user profiles, transactions
-- ACID compliance cho financial data integrity
-- Indexes được tối ưu cho query performance
-- Backup & replication cho high availability
-
-**Redis Cache:**
-- Session management và user authentication state
-- Rate limiting counters
-- Hot data caching (active CD list, interest rates)
-- Pub/Sub cho real-time notifications
-- TTL-based expiry cho temporary data
-
-**Message Queue (RabbitMQ/Kafka):**
-- Event streaming giữa các services
-- Async processing cho non-critical tasks
-- Dead letter queue cho failed messages
-- Event replay capability cho debugging
-- Decoupling giữa event producers và consumers
-
----
-
-### 🔟 Reconciliation Service
-
-Đây là thành phần quan trọng đảm bảo tính nhất quán dữ liệu:
-
-**Chức năng chính:**
-- Real-time validation mỗi khi có transaction on-chain
-- Periodic batch reconciliation (hourly/daily)
-- So sánh:
-  - Total CD supply on-chain vs Total deposits off-chain
-  - Individual CD balance vs Bank records
-  - Interest calculations
-  - State transitions (PENDING → ISSUED → ACTIVE → MATURED)
-
-**Alert Mechanism:**
-- Automatic alerts qua Slack/PagerDuty khi phát hiện discrepancy
-- Pause new transactions cho đến khi resolve
-- Audit trail đầy đủ cho investigation
-- Dashboard cho admin monitoring
-
-**Integration Points:**
-- Query Blockchain RPC cho on-chain state
-- Query Mifox API cho banking records
-- Write reconciliation results vào PostgreSQL
-- Publish alerts vào Notification Service
-
----
-
-### 1️⃣1️⃣ Notification Service
-
-**Multi-channel Support:**
-- Email (transactional emails cho CD events)
-- SMS (OTP, urgent alerts)
-- Push notifications (mobile app)
-- Webhooks (third-party integrations)
-
-**Event Types:**
-- CD purchase confirmation
-- Interest payment notifications
-- Maturity reminders
-- Reconciliation alerts (admin only)
-- System status updates
-
-**Features:**
-- Template management với dynamic variables
-- Retry mechanism với exponential backoff
-- Delivery status tracking
-- User preference management (opt-in/opt-out)
-
----
-
-### 1️⃣2️⃣ Observability & Monitoring
-
-**Centralized Logging (ELK/Datadog):**
-- Aggregate logs từ tất cả services
-- Structured logging với correlation IDs
-- Full-text search capability
-- Log retention policies
-
-**Metrics & APM (Prometheus/Grafana):**
-- Service health metrics (CPU, memory, latency)
-- Business metrics (CD issued, total volume, active users)
-- Transaction success/failure rates
-- Blockchain RPC call latencies
-- Database query performance
-
-**Alert Manager:**
-- Threshold-based alerts
-- Anomaly detection
-- On-call rotation integration (PagerDuty)
-- Escalation policies
-- Incident management workflow
-
 #### Vòng đời CD (State Machine)
 
 ```mermaid
@@ -616,9 +479,53 @@ stateDiagram-v2
 - **REDEEMED**: Đã tất toán, hoàn tất vòng đời
 - **CANCELLED**: Đã hủy (timeout hoặc lỗi)
 
-**Chuyển trạng thái:**
+---
 
+### 9️⃣ Data & Cache Layer
 
+**PostgreSQL Database:**
+- Primary data store cho CD records, user profiles, transactions
+- ACID compliance cho financial data integrity
+- Indexes được tối ưu cho query performance
+- Backup & replication cho high availability
+
+**Redis Cache:**
+- Session management và user authentication state
+- Rate limiting counters
+- Hot data caching (active CD list, interest rates)
+- Pub/Sub cho real-time notifications
+- TTL-based expiry cho temporary data
+
+**Message Queue (RabbitMQ/Kafka):**
+- Event streaming giữa các services
+- Async processing cho non-critical tasks
+- Dead letter queue cho failed messages
+- Event replay capability cho debugging
+- Decoupling giữa event producers và consumers
+
+---
+
+### 🔟 Observability & Monitoring
+
+**Centralized Logging (ELK/Datadog):**
+- Aggregate logs từ tất cả services
+- Structured logging với correlation IDs
+- Full-text search capability
+- Log retention policies
+
+**Metrics & APM (Prometheus/Grafana):**
+- Service health metrics (CPU, memory, latency)
+- Business metrics (CD issued, total volume, active users)
+- Transaction success/failure rates
+- Blockchain RPC call latencies
+- Database query performance
+
+**Alert Manager:**
+- Threshold-based alerts
+- Anomaly detection
+- On-call rotation integration (PagerDuty)
+- Escalation policies
+- Incident management workflow
 
 ---
 
