@@ -4,48 +4,6 @@
 
 ---
 
-## Vấn đề chúng tôi giải quyết
-
-Chứng chỉ tiền gửi (Certificate of Deposit – CD) là sản phẩm tài chính an toàn và phổ biến trong hệ thống ngân hàng, tuy nhiên vẫn tồn tại nhiều hạn chế:
-
-- Thanh khoản thấp, gần như không có thị trường thứ cấp,
-- Quy trình phát hành, quản lý và tất toán còn thủ công,
-- Khó tích hợp vào hệ sinh thái tài chính số (treasury, collateral, DeFi có kiểm soát).
-
-Giải pháp của chúng tôi là xây dựng một **Layer-1 blockchain chuyên biệt** cho tài sản tài chính có quản lý, trong đó CD được:
-
-- token hóa  tài sản tiền gửi
-- quản lý vòng đời đầy đủ,
-- và vận hành minh bạch, có thể kiểm toán, trong khi ngân hàng vẫn giữ vai trò trung tâm về lưu ký và đối soát tiền.
-
----
-
-## Triết lý thiết kế: Compliance-first
-
-Chứng chỉ tiền gửi là financial instrument có ràng buộc pháp lý, vì vậy kiến trúc hệ thống được xây dựng theo nguyên tắc:
-
-**Tuân thủ trước – công nghệ sau**
-
-Hệ thống: không thay thế ngân hàng,mà kết nối core banking truyền thống với một Layer-1 blockchain chuyên biệt.
-
-Trong mô hình này:
-- Ngân hàng chịu trách nhiệm lưu ký tiền fiat và tính toán lãi,
-- Blockchain đóng vai trò lớp settlement, tự động hóa và kiểm toán minh bạch.
-
----
-
-## Vì sao cần Layer-1 riêng (Application-Specific L1)?
-
-Việc triển khai CD chỉ bằng smart contract trên public chain không đáp ứng được các yêu cầu sau:
-
-- Kiểm soát validator và participant,
-- Tuân thủ KYC/AML và chính sách nội bộ,
-- Phí giao dịch ổn định, hiệu năng cao,
-- Tích hợp chặt chẽ với core banking.
-
-Do đó, chúng tôi lựa chọn **Application-Specific Layer-1**, được thiết kế riêng cho tài sản tài chính có quản lý, thay vì chỉ triển khai smart contract trên public blockchain.
-
----
 
 ## Tổng quan kiến trúc hệ thống
 
